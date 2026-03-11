@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>ระบบบัญชีมะพร้าว V8 - Export to Excel</title>
+    <style>
+        body { font-family: 'Kanit', sans-serif; text-align: center; margin-top: 20px; background-color: #f4f7f6; color: #333; }
+        .container { display: flex; justify-content: center; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        
+        .calculator-box { background: white; padding: 25px; border-radius: 10px; width: 300px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        input { width: 90%; padding: 10px; margin: 8px 0; border: 1px solid #ccc; border-radius: 5px; font-size: 15px; }
+        
+        /* ตกแต่งปุ่มต่างๆ */
+        .btn-main { width: 100%; padding: 12px; margin-top: 10px; background-color: #28a745; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; }
+        .btn-main:hover { background-color: #218838; }
+        
+        .btn-clear { width: 100%; padding: 10px; margin-top: 10px; background-color: #6c757d; color: white; border: none; border-radius: 5px; cursor: pointer; }
+        .btn-clear:hover { background-color: #5a6268; }
+
+        /* ปุ่ม Export สีส้มโดดเด่น */
+        .btn-export { width: 100%; padding: 12px; margin-top: 15px; background-color: #fd7e14; color: white; border: none; border-radius: 5px; cursor: pointer; font-size: 16px; font-weight: bold; border: 2px dashed #e8590c; }
+        .btn-export:hover { background-color: #e8590c; }
+
+        .btn-delete { background-color: #dc3545; color: white; border: none; padding: 5px 10px; border-radius: 3px; cursor: pointer; font-size: 12px; }
+        .btn-delete:hover { background-color: #c82333; }
+
+        .dashboard { display: flex; justify-content: space-around; background: white; padding: 20px; border-radius: 10px; max-width: 800px; margin: 0 auto; box-shadow: 0 4px 15px rgba(0,0,0,0.05); }
+        .kpi-card { padding: 15px; border-radius: 8px; width: 30%; text-align: center; }
+        .kpi-title { font-size: 14px; color: #666; margin-bottom: 5px; }
+        .kpi-value { font-size: 24px; font-weight: bold; }
+        .bg-revenue { background-color: #e3f2fd; color: #0d47a1; }
+        .bg-cost { background-color: #fff3e0; color: #e65100; }
+        .bg-profit { background-color: #e8f5e9; color: #1b5e20; }
+
+        .table-box { background: white; padding: 25px; border-radius: 10px; width: 650px; box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow-x: auto; }
+        table { width: 100%; border-collapse: collapse; margin-top: 10px; font-size: 14px; }
+        th, td { border: 1px solid #eee; padding: 10px; text-align: right; }
+        th { background-color: #343a40; color: white; text-align: center; }
+        .profit-green { color: #28a745; font-weight: bold; }
+        .loss-red { color: #dc3545; font-weight: bold; }
+        .date-text { font-size: 12px; color: #666; text-align: center; }
+    </style>
+</head>
+<body>
+
+    <h2>🥥 ระบบจัดการธุรกิจมะพร้าว V8</h2>
+
+    <div class="dashboard">
+        <div class="kpi-card bg-revenue">
+            <div class="kpi-title">รายได้สะสม (บาท)</div>
+            <div class="kpi-value" id="sumRevenue">0</div>
+        </div>
+        <div class="kpi-card bg-cost">
+            <div class="kpi-title">ต้นทุนสะสม (บาท)</div>
+            <div class="kpi-value" id="sumCost">0</div>
+        </div>
+        <div class="kpi-card bg-profit">
+            <div class="kpi-title">กำไรสุทธิสะสม (บาท)</div>
+            <div class="kpi-value" id="sumProfit">0</div>
+        </div>
+    </div>
+
+    <div class="container">
+        <div class="calculator-box">
+            <h3>📝 บันทึกรอบวิ่งรถ</h3>
+            <input type="number" id="costPrice" placeholder="ต้นทุนรับซื้อ (บาท/ลูก)">
+            <input type="number" id="sellPrice" placeholder="ราคาขายส่ง (บาท/ลูก)">
+            <input type="number" id="quantity" placeholder="จำนวน (ลูก)">
+            <input type="number" id="transportCost" placeholder="ค่าขนส่ง 4 ล้อ (บาท/เที่ยว)">
+            
+            <button class="btn-main" onclick="saveRecord()">บันทึกรายการ</button>
+            <button class="btn-clear" onclick="clearHistory()">ล้างประวัติทั้งหมด</button>
+            
+            <button class="btn-export" onclick="exportToCSV()">📥 Export to Excel (CSV)</button>
+        </div>
+
+        <div class="table-box">
+            <h3>📊 สมุดรายวันการวิ่งรถ (<span id="totalTrips">0</span> รอบ)</h3>
+            <table>
+                <thead>
+                    <tr>
+                        <th>วัน/เวลา</th>
+                        <th>รอบที่</th>
+                        <th>จำนวน</th>
+                        <th>ต้นทุนรวม</th>
+                        <th>รายได้รวม</th>
+                        <th>กำไรสุทธิ</th>
+                        <th>จัดการ</th>
+                    </tr>
+                </thead>
+                <tbody id="historyTableBody"></tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        let tripHistory = [];
+
+        window.onload = function() {
+            let savedData = localStorage.getItem('coconutLedger');
+            if(savedData) {
+                tripHistory = JSON.parse(savedData);
+                renderTableAndDashboard(); 
+            }
+        }
+
+        function saveRecord() {
+            let cost = Number(document.getElementById('costPrice').value);
+            let sell = Number(document.getElementById('sellPrice').value);
+            let qty = Number(document.getElementById('quantity').value);
+            let transport = Number(document.getElementById('transportCost').value);
+
+            if(cost === 0 || sell === 0 || qty === 0) {
+                alert("กรุณากรอกข้อมูลให้ครบถ้วนก่อนบันทึกครับ!");
+                return;
+            }
+
+            let now = new Date();
+            let formattedDate = now.toLocaleString('th-TH', { 
+                day: '2-digit', month: '2-digit', year: 'numeric', 
+                hour: '2-digit', minute: '2-digit' 
+            });
+
+            tripHistory.push({
+                date: formattedDate,
+                qty: qty,
+                totalCost: (cost * qty) + transport,
+                totalRevenue: sell * qty,
+                netProfit: (sell * qty) - ((cost * qty) + transport)
+            });
+
+            localStorage.setItem('coconutLedger', JSON.stringify(tripHistory));
+            
+            document.getElementById('costPrice').value = '';
+            document.getElementById('sellPrice').value = '';
+            document.getElementById('quantity').value = '';
+            document.getElementById('transportCost').value = '';
+
+            renderTableAndDashboard();
+        }
+
+        function deleteRecord(index) {
+            if(confirm("ต้องการยกเลิกรายการรอบวิ่งรถที่ " + (index + 1) + " ใช่หรือไม่?")) {
+                tripHistory.splice(index, 1); 
+                localStorage.setItem('coconutLedger', JSON.stringify(tripHistory));
+                renderTableAndDashboard(); 
+            }
+        }
+
+        function renderTableAndDashboard() {
+            let tableBody = document.getElementById('historyTableBody');
+            tableBody.innerHTML = ''; 
+            let sumRev = 0, sumCst = 0, sumProf = 0;
+
+            for(let i = 0; i < tripHistory.length; i++) {
+                let trip = tripHistory[i];
+                sumRev += trip.totalRevenue;
+                sumCst += trip.totalCost;
+                sumProf += trip.netProfit;
+
+                let profitClass = trip.netProfit >= 0 ? 'profit-green' : 'loss-red';
+                let displayDate = trip.date ? trip.date : "-";
+
+                let row = `<tr>
+                    <td class="date-text">${displayDate}</td>
+                    <td style="text-align: center;">${i + 1}</td>
+                    <td>${trip.qty.toLocaleString()}</td>
+                    <td>${trip.totalCost.toLocaleString()}</td>
+                    <td>${trip.totalRevenue.toLocaleString()}</td>
+                    <td class="${profitClass}">${trip.netProfit.toLocaleString()}</td>
+                    <td style="text-align: center;">
+                        <button class="btn-delete" onclick="deleteRecord(${i})">ลบ</button>
+                    </td>
+                </tr>`;
+                tableBody.innerHTML += row; 
+            }
+
+            document.getElementById('sumRevenue').innerText = sumRev.toLocaleString();
+            document.getElementById('sumCost').innerText = sumCst.toLocaleString();
+            document.getElementById('sumProfit').innerText = sumProf.toLocaleString();
+            document.getElementById('totalTrips').innerText = tripHistory.length; 
+            
+            let profitCard = document.getElementById('sumProfit').parentElement;
+            profitCard.style.backgroundColor = sumProf < 0 ? '#ffebee' : '#e8f5e9';
+            profitCard.style.color = sumProf < 0 ? '#c62828' : '#1b5e20';
+        }
+
+        function clearHistory() {
+            if(confirm("ล้างประวัติทั้งหมด?")) {
+                localStorage.removeItem('coconutLedger');
+                tripHistory = [];
+                renderTableAndDashboard(); 
+            }
+        }
+
+        // --- ฟังก์ชันใหม่: สร้างและดาวน์โหลดไฟล์ CSV ---
+        function exportToCSV() {
+            if (tripHistory.length === 0) {
+                alert("ยังไม่มีข้อมูลให้ Export ครับ! ลองบันทึกข้อมูลดูก่อนนะ");
+                return;
+            }
+
+            // 1. ใส่รหัสลับ \uFEFF (BOM) เพื่อให้ Excel อ่านภาษาไทยออก ไม่เป็นภาษาต่างดาว!
+            let csvContent = "\uFEFF"; 
+            
+            // 2. สร้างหัวตาราง (Header)
+            csvContent += "วันที่และเวลา,รอบที่,จำนวน (ลูก),ต้นทุนรวม (บาท),รายได้รวม (บาท),กำไรสุทธิ (บาท)\n";
+
+            // 3. วนลูปดึงข้อมูลจาก Array มาเรียงต่อกัน บรรทัดต่อบรรทัด (\n คือการขึ้นบรรทัดใหม่)
+            for (let i = 0; i < tripHistory.length; i++) {
+                let trip = tripHistory[i];
+                let date = trip.date ? trip.date : "-";
+                
+                // เราจะไม่ใส่ .toLocaleString() ตรงนี้ เพราะเราอยากให้ Excel ได้ตัวเลขเพียวๆ เอาไปบวกเลขต่อได้
+                let row = `${date},${i + 1},${trip.qty},${trip.totalCost},${trip.totalRevenue},${trip.netProfit}`;
+                csvContent += row + "\n";
+            }
+
+            // 4. สร้างก้อนไฟล์เสมือน (Blob) และสั่งให้เบราว์เซอร์ดาวน์โหลด
+            let blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+            let link = document.createElement("a");
+            let url = URL.createObjectURL(blob);
+            
+            link.setAttribute("href", url);
+            link.setAttribute("download", "ประวัติวิ่งรถมะพร้าว.csv"); // ตั้งชื่อไฟล์ที่นี่
+            link.style.visibility = 'hidden';
+            
+            document.body.appendChild(link);
+            link.click(); // สั่งจำลองการคลิกดาวน์โหลด
+            document.body.removeChild(link); // โหลดเสร็จก็ล้างทิ้งให้สะอาด
+        }
+    </script>
+
+</body>
+</html>
